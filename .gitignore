@@ -1,0 +1,23 @@
+# Compiled binaries and object files
+*.o
+*.obj
+*.dylib
+*.a
+*.zip
+*.tar.gz
+pixelvault
+pixelvault_mac
+pixelvault-linux
+macos/pixelvault_mac
+macos/PixelVault.app/Contents/MacOS/pixelvault
+linux/pixelvault-linux
+windows/pixelvault.exe
+
+# Temporary files
+test_*
+.DS_Store
+
+# Build directories
+build/
+.vscode/
+.idea/

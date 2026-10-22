@@ -1,0 +1,147 @@
+name: Build and Release Standalone Binaries (Windows, Linux, macOS)
+
+on:
+  push:
+    branches: [ main, master ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main, master ]
+  release:
+    types: [ published ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  # ========================================================
+  # 1. WINDOWS BUILD (Static EXE, Zero DLLs needed)
+  # ========================================================
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup MSYS2 MinGW-w64
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            git
+            make
+            mingw-w64-x86_64-toolchain
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-fltk
+            mingw-w64-x86_64-libpng
+            mingw-w64-x86_64-libjpeg-turbo
+            mingw-w64-x86_64-zlib
+
+      - name: Build Standalone Windows EXE
+        shell: msys2 {0}
+        run: |
+          cd pixelvault/windows
+          g++ -std=c++17 -O2 -static -static-libgcc -static-libstdc++ \
+            -I../code \
+            ../code/crypto.cpp ../code/stego_engine.cpp ../code/image_box.cpp ../code/gui.cpp ../code/main.cpp \
+            -o pixelvault.exe \
+            $(fltk-config --ldstaticflags --use-images) \
+            -mwindows
+
+      - name: Package Windows ZIP
+        shell: bash
+        run: |
+          cd pixelvault/windows
+          zip -r ../../PixelVault-Windows-x64.zip pixelvault.exe
+
+      - name: Upload Windows Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PixelVault-Windows-x64
+          path: PixelVault-Windows-x64.zip
+
+  # ========================================================
+  # 2. LINUX BUILD (Standalone Portable Binary)
+  # ========================================================
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libfltk1.3-dev libpng-dev libjpeg-dev zlib1g-dev build-essential zip
+
+      - name: Build Standalone Linux Binary
+        run: |
+          cd pixelvault/linux
+          g++ -std=c++17 -O2 -I../code \
+            ../code/crypto.cpp ../code/stego_engine.cpp ../code/image_box.cpp ../code/gui.cpp ../code/main.cpp \
+            -o pixelvault-linux \
+            -lfltk_images -lfltk -lpng -ljpeg -lz -lX11 -lXext -lXinerama -lXft -lfontconfig -lpthread -ldl
+          zip -r ../../PixelVault-Linux-x86_64.zip pixelvault-linux
+
+      - name: Upload Linux Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PixelVault-Linux-x86_64
+          path: PixelVault-Linux-x86_64.zip
+
+  # ========================================================
+  # 3. MACOS BUILD (Standalone .app Bundle)
+  # ========================================================
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install FLTK via Homebrew
+        run: |
+          brew install fltk libpng jpeg-turbo
+
+      - name: Build Standalone App
+        run: |
+          cd pixelvault/macos
+          make app
+          zip -r ../../PixelVault-macOS.zip PixelVault.app
+
+      - name: Upload macOS Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PixelVault-macOS
+          path: PixelVault-macOS.zip
+
+  # ========================================================
+  # 4. PUBLISH TO RELEASES (Auto-attaches files if release/tag)
+  # ========================================================
+  publish-release:
+    needs: [build-windows, build-linux, build-macos]
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'release'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Windows Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: PixelVault-Windows-x64
+
+      - name: Download Linux Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: PixelVault-Linux-x86_64
+
+      - name: Download macOS Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: PixelVault-macOS
+
+      - name: Upload Binaries to Release Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            PixelVault-Windows-x64.zip
+            PixelVault-Linux-x86_64.zip
+            PixelVault-macOS.zip
